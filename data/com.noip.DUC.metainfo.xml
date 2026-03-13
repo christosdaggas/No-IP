@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.noip.DUC</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>No-IP DUC</name>
+  <summary>Keep your dynamic IP address updated with No-IP DNS</summary>
+  <description>
+    <p>
+      No-IP Dynamic Update Client (DUC) monitors your public IP address and
+      automatically updates your No-IP hostname records whenever it changes.
+      It includes a graphical interface for managing hostnames, viewing status,
+      and controlling a background systemd service.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.noip.DUC.desktop</launchable>
+  <url type="homepage">https://www.noip.com</url>
+  <developer id="com.noip">
+    <name>No-IP</name>
+  </developer>
+  <branding>
+    <color type="primary" scheme_preference="light">#8dbd09</color>
+    <color type="primary" scheme_preference="dark">#111216</color>
+  </branding>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="3.3.0" date="2026-03-10">
+      <description>
+        <p>Initial release with GUI, systemd service management, and API-key host detection.</p>
+      </description>
+    </release>
+  </releases>
+  <provides>
+    <binary>noip-duc-gui</binary>
+    <binary>noip-duc</binary>
+  </provides>
+  <categories>
+    <category>Network</category>
+  </categories>
+  <keywords>
+    <keyword>dns</keyword>
+    <keyword>ddns</keyword>
+    <keyword>noip</keyword>
+    <keyword>dynamic</keyword>
+  </keywords>
+</component>

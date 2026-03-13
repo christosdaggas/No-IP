@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=No-IP DUC
+Comment=No-IP Dynamic DNS Update Client
+Exec=noip-duc-gui
+Terminal=false
+Type=Application
+Categories=Network;
+Keywords=dns;ddns;noip;dynamic;

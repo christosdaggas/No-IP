@@ -1,0 +1,14 @@
+[Unit]
+Description=No-IP Dynamic DNS Update Client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/sysconfig/noip-duc
+ExecStart=/usr/bin/noip-duc
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=No-IP DUC
+Comment=No-IP Dynamic DNS Update Client
+Exec=noip-duc-gui
+Icon=com.noip.DUC
+Terminal=false
+Categories=Network;
+Keywords=dns;ddns;noip;dynamic;
+StartupWMClass=com.noip.DUC

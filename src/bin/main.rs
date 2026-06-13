@@ -2,71 +2,68 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use log::debug;
 
 use noip_duc::{noip2, public_ip::IpMethods, updater, NotificationLogger, SleepOnlyController};
 
-// This is used to handle --import since the `exclusive` and `conflicts_with` options don't seem to
-// work in clap 3.0.0-beta.5. Perhaps they will work in the future or when it goes stable. This
-// should be revisited.
+// Used to handle --import without requiring --username/--password.
 #[derive(Debug, Parser)]
 struct PreConfig {
     /// Import config from noip2 and display it as environment variables.
-    #[clap(long, parse(from_os_str), default_missing_value = "/etc/no-ip2.conf")]
+    #[arg(long, num_args = 0..=1, default_missing_value = "/etc/no-ip2.conf")]
     import: PathBuf,
 }
 
-#[derive(Debug, Parser)]
-#[clap(about = "No-IP Dynamic Update Client", version = clap::crate_version!())]
+#[derive(Parser)]
+#[command(about = "No-IP Dynamic Update Client", version)]
 struct Config {
     /// Your www.noip.com username. For better security, use Update Group credentials. https://www.noip.com/members/dns/dyn-groups.php
-    #[clap(short, long, env = "NOIP_USERNAME")]
+    #[arg(short, long, env = "NOIP_USERNAME")]
     username: String,
 
     /// Your www.noip.com password. For better security, use Update Group credentials. https://www.noip.com/members/dns/dyn-groups.php
-    #[clap(short, long, env = "NOIP_PASSWORD")]
+    #[arg(short, long, env = "NOIP_PASSWORD")]
     password: String,
 
     /// Comma separated list of groups and hostnames to update.
-    // use std::vec::Vec to avoid Clap magic
-    #[clap(short = 'g', long, env = "NOIP_HOSTNAMES", parse(try_from_str = parse_hostnames))]
+    #[arg(short = 'g', long, env = "NOIP_HOSTNAMES", value_parser = parse_hostnames)]
     hostnames: Option<std::vec::Vec<String>>,
 
     /// How often to check for a new IP address. Minimum: every 2 minutes.
-    #[clap(long, env = "NOIP_CHECK_INTERVAL", default_value = "5m", parse(try_from_str = humantime::parse_duration))]
+    #[arg(long, env = "NOIP_CHECK_INTERVAL", default_value = "5m", value_parser = parse_duration_arg)]
     check_interval: Duration,
 
     /// Timeout when making HTTP requests.
-    #[clap(long, env = "NOIP_HTTP_TIMEOUT", default_value = "10s", parse(try_from_str = humantime::parse_duration))]
+    #[arg(long, env = "NOIP_HTTP_TIMEOUT", default_value = "10s", value_parser = parse_duration_arg)]
     http_timeout: Duration,
 
     #[cfg(target_family = "unix")]
     /// Fork into the background
-    #[clap(long)]
+    #[arg(long)]
     daemonize: bool,
 
     #[cfg(target_family = "unix")]
     /// When daemonizing, become this user.
-    #[clap(long, env = "NOIP_DAEMON_USER")]
+    #[arg(long, env = "NOIP_DAEMON_USER")]
     daemon_user: Option<String>,
 
     #[cfg(target_family = "unix")]
     /// When daemonizing, become this group.
-    #[clap(long, env = "NOIP_DAEMON_GROUP")]
+    #[arg(long, env = "NOIP_DAEMON_GROUP")]
     daemon_group: Option<String>,
 
     #[cfg(target_family = "unix")]
     /// When daemonizing, write process id to this file.
-    #[clap(long, env = "NOIP_DAEMON_PID_FILE", parse(from_os_str))]
+    #[arg(long, env = "NOIP_DAEMON_PID_FILE")]
     daemon_pid_file: Option<PathBuf>,
 
     /// Increase logging verbosity. May be used multiple times.
-    #[clap(short, long, parse(from_occurrences))]
-    verbose: i32,
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    verbose: u8,
 
     /// Set the log level. Possible values: trace, debug, info, warn, error, critical. Overrides --verbose.
-    #[clap(short, long, env = "NOIP_LOG_LEVEL")]
+    #[arg(short, long, env = "NOIP_LOG_LEVEL", value_enum, ignore_case = true)]
     log_level: Option<LogLevel>,
 
     /// Command to run when the IP address changes. It is run with the environment variables
@@ -78,7 +75,7 @@ struct Config {
     /// Example
     ///
     ///   noip_duc -e 'mail -s "IP changed to {{CURRENT_IP}} from {{LAST_IP}}" user@example.com'
-    #[clap(short = 'e', long, env = "NOIP_EXEC_ON_CHANGE")]
+    #[arg(short = 'e', long, env = "NOIP_EXEC_ON_CHANGE")]
     exec_on_change: Option<String>,
 
     /// Methods used to discover the public IP, as a comma separated list. They are tried in order
@@ -93,64 +90,75 @@ struct Config {
     /// - 'http-port-8245': No-IP's HTTP method on port 8245.
     /// - 'static:<ip address>': always use this IP address. Helpful with --once.
     /// - HTTP URL: An HTTP URL that returns only an IP address.
-    #[clap(
+    #[arg(
         long,
         env = "NOIP_IP_METHOD",
         default_value = "dns,http,http-port-8245",
         verbatim_doc_comment
     )]
-    ip_method: IpMethods,
+    ip_method: String,
 
     /// Find the public IP and send an update, then exit. This is a good method to verify correct
     /// credentials.
-    #[clap(long)]
+    #[arg(long)]
     once: bool,
-
-    /// Import config from noip2 and display it as environment variables.
-    #[clap(long, default_value = "/etc/no-ip2.conf")]
-    import: Option<Option<PathBuf>>,
 }
 
-impl<'a> From<&'a Config> for noip_duc::Config<'a> {
-    fn from(config: &'a Config) -> Self {
+struct ResolvedConfig {
+    raw: Config,
+    ip_method: IpMethods,
+}
+
+// Manual Debug impl that redacts the password so `debug!("{:?}", config)` (and any
+// other Debug printing) cannot leak credentials into logs.
+impl fmt::Debug for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("Config");
+        d.field("username", &self.username);
+        d.field("password", &"<redacted>");
+        d.field("hostnames", &self.hostnames);
+        d.field("check_interval", &self.check_interval);
+        d.field("http_timeout", &self.http_timeout);
+        #[cfg(target_family = "unix")]
+        {
+            d.field("daemonize", &self.daemonize);
+            d.field("daemon_user", &self.daemon_user);
+            d.field("daemon_group", &self.daemon_group);
+            d.field("daemon_pid_file", &self.daemon_pid_file);
+        }
+        d.field("verbose", &self.verbose);
+        d.field("log_level", &self.log_level);
+        d.field("exec_on_change", &self.exec_on_change);
+        d.field("ip_method", &self.ip_method);
+        d.field("once", &self.once);
+        d.finish()
+    }
+}
+
+impl<'a> From<&'a ResolvedConfig> for noip_duc::Config<'a> {
+    fn from(config: &'a ResolvedConfig) -> Self {
         Self {
-            username: config.username.as_str(),
-            password: config.password.as_str(),
-            hostnames: config.hostnames.as_ref(),
-            check_interval: config.check_interval,
-            http_timeout: config.http_timeout,
-            exec_on_change: config.exec_on_change.as_deref(),
+            username: config.raw.username.as_str(),
+            password: config.raw.password.as_str(),
+            hostnames: config.raw.hostnames.as_ref(),
+            check_interval: config.raw.check_interval,
+            http_timeout: config.raw.http_timeout,
+            exec_on_change: config.raw.exec_on_change.as_deref(),
             ip_method: &config.ip_method,
-            once: config.once,
+            once: config.raw.once,
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, ValueEnum)]
 enum LogLevel {
     Trace,
     Debug,
     Info,
-    Warning,
+    #[value(alias = "warning")]
+    Warn,
     Error,
     Critical,
-}
-
-impl std::str::FromStr for LogLevel {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        use LogLevel::*;
-        Ok(match s.to_lowercase().as_str() {
-            "trace" => Trace,
-            "debug" => Debug,
-            "info" => Info,
-            "warn" | "warning" => Warning,
-            "error" => Error,
-            "critical" => Critical,
-            _ => anyhow::bail!("unknown log level"),
-        })
-    }
 }
 
 use std::fmt;
@@ -161,17 +169,21 @@ impl fmt::Display for LogLevel {
             Trace => f.write_str("trace"),
             Debug => f.write_str("debug"),
             Info => f.write_str("info"),
-            Warning => f.write_str("warning"),
+            Warn => f.write_str("warn"),
             Error => f.write_str("error"),
             Critical => f.write_str("critical"),
         }
     }
 }
 
+fn parse_duration_arg(s: &str) -> Result<Duration, String> {
+    humantime::parse_duration(s).map_err(|e| e.to_string())
+}
+
 // May be hostnames or group names
-fn parse_hostnames(s: &str) -> Result<Vec<String>> {
+fn parse_hostnames(s: &str) -> Result<Vec<String>, String> {
     if s.len() >= 4000 {
-        anyhow::bail!("hostnames too long");
+        return Err("hostnames too long".into());
     }
 
     let hostnames: Vec<String> = s.split(',').map(|s| s.trim().to_owned()).collect();
@@ -182,10 +194,9 @@ fn parse_hostnames(s: &str) -> Result<Vec<String>> {
             continue;
         }
         if !is_hostname(h) {
-            anyhow::bail!(
-                "invalid hostname {}. Hostnames must be a comma separated list of hostnames and group names.",
-                h
-            );
+            return Err(format!(
+                "invalid hostname {h}. Hostnames must be a comma separated list of hostnames and group names."
+            ));
         }
     }
 
@@ -236,13 +247,22 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     };
 
-    let config = Config::parse();
+    let raw = Config::parse();
 
-    if config.check_interval < Duration::from_secs(120) {
+    if raw.check_interval < Duration::from_secs(120) {
         anyhow::bail!("--check_interval must be no less than 2 minutes");
     }
 
-    let log_level = config.log_level.as_ref().unwrap_or(match config.verbose {
+    let ip_method: IpMethods = raw
+        .ip_method
+        .parse()
+        .map_err(|e: noip_duc::public_ip::ParseError| {
+            anyhow::anyhow!("invalid --ip-method: {e}")
+        })?;
+
+    let config = ResolvedConfig { raw, ip_method };
+
+    let log_level = config.raw.log_level.as_ref().unwrap_or(match config.raw.verbose {
         0 => &LogLevel::Info,
         1 => &LogLevel::Debug,
         _ => &LogLevel::Trace,
@@ -254,11 +274,11 @@ fn main() -> anyhow::Result<()> {
     .init();
 
     #[cfg(target_family = "unix")]
-    if config.daemonize {
-        daemonize(&config)?;
+    if config.raw.daemonize {
+        daemonize(&config.raw)?;
     }
 
-    debug!("{:?}", config);
+    debug!("{:?}", config.raw);
 
     updater(
         (&config).into(),

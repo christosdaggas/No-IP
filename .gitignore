@@ -1,5 +1,10 @@
 target/
-dist/
+
+# RPM/DEB build artefacts — track the spec & build script under dist/, but
+# never the generated tarballs and .rpms.
+dist/rpm/out/
+dist/**/*.rpm
+dist/**/*.tar.gz
 
 # Editor and OS noise
 .DS_Store

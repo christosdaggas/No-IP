@@ -113,15 +113,20 @@ pub fn update(
         .as_str()
         .map_err(|e| UpdateError::Unknown(format!("{}", e)))?;
 
-    match r.status_code {
+    parse_response(r.status_code, &r.reason_phrase, body)
+}
+
+/// Map a No-IP API response to an [`UpdateResult`]. Split out from [`update`]
+/// so the (extensive) response-code matrix can be unit-tested without
+/// standing up an HTTP mock.
+///
+/// The body matrix is documented at
+/// <https://www.noip.com/integrate/response>.
+pub fn parse_response(status: i32, reason: &str, body: &str) -> UpdateResult {
+    match status {
         200 => {}
         401 => return Err(UpdateError::BadAuth),
-        _ => {
-            return Err(UpdateError::StatusCode(
-                r.status_code,
-                r.reason_phrase.clone(),
-            ))
-        }
+        _ => return Err(UpdateError::StatusCode(status, reason.to_string())),
     }
 
     match body.trim_end() {
@@ -151,4 +156,135 @@ fn encode_username(username: &str) -> String {
 fn base64_encode<T: AsRef<[u8]>>(bytes: T) -> String {
     use base64::Engine as _;
     base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn good_response_means_changed() {
+        assert!(matches!(
+            parse_response(200, "OK", "good 192.0.2.1\n"),
+            Ok(true)
+        ));
+    }
+
+    #[test]
+    fn nochg_response_means_unchanged() {
+        assert!(matches!(
+            parse_response(200, "OK", "nochg 192.0.2.1\n"),
+            Ok(false)
+        ));
+    }
+
+    #[test]
+    fn nohost_response_maps_to_nohost_error() {
+        assert!(matches!(
+            parse_response(200, "OK", "nohost"),
+            Err(UpdateError::NoHost)
+        ));
+    }
+
+    #[test]
+    fn badauth_body_maps_to_badauth_error() {
+        assert!(matches!(
+            parse_response(200, "OK", "badauth"),
+            Err(UpdateError::BadAuth)
+        ));
+    }
+
+    #[test]
+    fn badagent_response_maps_to_badagent_error() {
+        assert!(matches!(
+            parse_response(200, "OK", "badagent"),
+            Err(UpdateError::BadAgent)
+        ));
+    }
+
+    #[test]
+    fn not_donator_response_maps_to_not_donator_error() {
+        assert!(matches!(
+            parse_response(200, "OK", "!donator"),
+            Err(UpdateError::NotDonator)
+        ));
+    }
+
+    #[test]
+    fn abuse_response_maps_to_abuse_error() {
+        assert!(matches!(
+            parse_response(200, "OK", "abuse"),
+            Err(UpdateError::Abuse)
+        ));
+    }
+
+    #[test]
+    fn server_outage_911_maps_to_nine_one_one() {
+        assert!(matches!(
+            parse_response(200, "OK", "911"),
+            Err(UpdateError::NineOneOne)
+        ));
+    }
+
+    #[test]
+    fn unknown_body_falls_through() {
+        match parse_response(200, "OK", "wat") {
+            Err(UpdateError::Unknown(s)) => assert_eq!(s, "wat"),
+            other => panic!("expected Unknown, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn http_401_short_circuits_to_badauth_regardless_of_body() {
+        assert!(matches!(
+            parse_response(401, "Unauthorized", "ignored"),
+            Err(UpdateError::BadAuth)
+        ));
+    }
+
+    #[test]
+    fn non_200_non_401_status_propagates_with_reason() {
+        match parse_response(503, "Service Unavailable", "") {
+            Err(UpdateError::StatusCode(c, r)) => {
+                assert_eq!(c, 503);
+                assert_eq!(r, "Service Unavailable");
+            }
+            other => panic!("expected StatusCode, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn trailing_whitespace_is_stripped_before_match() {
+        assert!(matches!(
+            parse_response(200, "OK", "abuse\r\n"),
+            Err(UpdateError::Abuse)
+        ));
+    }
+
+    // Backoff-classification tests guard against accidentally moving a
+    // permanent error into the transient bucket (which would cause a process
+    // manager to thrash retrying).
+    #[test]
+    fn permanent_errors_back_off_for_two_weeks() {
+        for e in [
+            UpdateError::BadAuth,
+            UpdateError::BadAgent,
+            UpdateError::NoHost,
+            UpdateError::NotDonator,
+            UpdateError::Abuse,
+        ] {
+            let d = e.retry_backoff(0, Duration::from_secs(300));
+            assert_eq!(
+                d,
+                Duration::from_secs(FOREVER),
+                "{e:?} should back off forever, got {d:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn transient_errors_use_base_interval_at_first() {
+        let d = UpdateError::Connection("dns".into()).retry_backoff(0, Duration::from_secs(300));
+        assert_eq!(d, Duration::from_secs(300));
+    }
 }

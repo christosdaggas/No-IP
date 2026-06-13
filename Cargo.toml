@@ -6,6 +6,7 @@ description = "No-IP Dynamic Update Client (https://www.noip.com)"
 license = "Apache-2.0"
 homepage = "https://www.noip.com"
 edition = "2021"
+rust-version = "1.76"
 
 [[bin]]
 name = "noip-duc"
@@ -14,6 +15,15 @@ path = "src/bin/main.rs"
 [[bin]]
 name = "noip-duc-gui"
 path = "src/bin/gui/main.rs"
+required-features = ["gui"]
+
+[[bin]]
+# Legacy single-file GUI implementation. The modular GUI under src/bin/gui/
+# is the live code path; this binary is kept compiling only behind the same
+# feature so old packagers don't break.
+name = "gui"
+path = "src/bin/gui.rs"
+required-features = ["gui"]
 
 [lib]
 name = "noip_duc"
@@ -25,12 +35,10 @@ path = "src/lib.rs"
 anyhow = "^1"
 base64 = "^0.22"
 byteorder = "^1.4"
-# Cannot go beyond clap 3.2.21 due to IpMethods needing to be Clone + Send + Sync.
-# https://github.com/clap-rs/clap/issues/4347
-# It is absolutely not necessary for this program to require these constraints.
-# These constraints may be relaxed in v5 or we may need to find a cli args
-# parser that is more suited to command line utilities.
-clap = { version = "3.2.21", features = ["cargo", "derive", "env"] }
+# `IpMethods` is parsed from a String after clap is done, so clap doesn't
+# require it to impl `Clone + Send + Sync`. See `Config::ip_method` in
+# src/bin/main.rs.
+clap = { version = "^4.5", features = ["cargo", "derive", "env"] }
 env_logger = "^0.11"
 form_urlencoded = "^1"
 humantime = "^2"
@@ -38,7 +46,7 @@ log = "^0.4"
 minreq = { version = "^2.6", features = ["https-rustls"] }
 percent-encoding = "^2"
 thiserror = "1.0"
-trust-dns-resolver = "^0.23"
+hickory-resolver = "^0.24"
 url = "^2.2"
 eframe = { version = "0.28", optional = true }
 egui_extras = { version = "0.28", optional = true, features = ["image"] }
@@ -48,9 +56,11 @@ serde_json = "1.0.149"
 dirs = "6.0.0"
 reqwest = { version = "0.13.2", features = ["blocking", "json"] }
 libc = { version = "0.2", optional = true }
+zeroize = { version = "^1.8", features = ["zeroize_derive"] }
+keyring = { version = "^3", optional = true, features = ["sync-secret-service", "crypto-rust"] }
 
 [features]
-gui = ["eframe", "egui_extras", "image", "libc"]
+gui = ["eframe", "egui_extras", "image", "libc", "keyring"]
 
 [target.'cfg(unix)'.dependencies]
 daemonize = "^0.5"

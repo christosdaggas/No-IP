@@ -10,5 +10,43 @@ ExecStart=/usr/bin/noip-duc
 Restart=on-failure
 RestartSec=30
 
+# --- Hardening ---
+# Run as a transient unprivileged user with no home, no shell, no
+# persistent state. The daemon only needs outbound HTTPS — no filesystem
+# writes, no devices, no extra capabilities.
+DynamicUser=yes
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+PrivateTmp=true
+PrivateDevices=true
+PrivateUsers=true
+PrivateMounts=true
+NoNewPrivileges=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+
+# Resource caps — this is a polling client, not a workload.
+MemoryMax=64M
+TasksMax=16
+CPUQuota=10%
+
 [Install]
 WantedBy=multi-user.target

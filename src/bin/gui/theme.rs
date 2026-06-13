@@ -1,68 +1,80 @@
 use eframe::egui;
+use eframe::egui::Color32;
+
+/// Max width of the centered card column. Sized to match the Lovable mockup
+/// (`max-w-[640px]` minus our outer horizontal padding).
+pub const CARD_COL_WIDTH: f32 = 620.0;
 
 // ═══ Brand palette ═══
-pub const GREEN: egui::Color32 = egui::Color32::from_rgb(141, 189, 9);
-pub const RED: egui::Color32 = egui::Color32::from_rgb(215, 58, 58);
-pub const BLUE: egui::Color32 = egui::Color32::from_rgb(56, 130, 216);
-pub const AMBER: egui::Color32 = egui::Color32::from_rgb(230, 168, 28);
+pub const GREEN: Color32 = Color32::from_rgb(58, 203, 111);
+pub const RED:   Color32 = Color32::from_rgb(238, 70, 70);
+pub const BLUE:  Color32 = Color32::from_rgb(56, 130, 216);
+pub const AMBER: Color32 = Color32::from_rgb(230, 168, 28);
 
-// Dark
-const D_BG: egui::Color32 = egui::Color32::from_rgb(17, 18, 22);
-const D_CARD: egui::Color32 = egui::Color32::from_rgb(24, 26, 32);
-const D_BORDER: egui::Color32 = egui::Color32::from_rgb(42, 44, 52);
-const D_INPUT: egui::Color32 = egui::Color32::from_rgb(20, 22, 28);
-const D_TEXT: egui::Color32 = egui::Color32::from_rgb(225, 228, 235);
-const D_MUTED: egui::Color32 = egui::Color32::from_rgb(115, 120, 135);
-const D_ROW_ALT: egui::Color32 = egui::Color32::from_rgb(28, 30, 36);
+/// Soft fill behind the logo badge and the activity-log check icon.
+/// Premultiplied form of `(58, 203, 111)` at α=46/255 (≈18%).
+pub const PALE_GREEN: Color32 = Color32::from_rgba_premultiplied(10, 36, 20, 46);
 
-// Light
-const L_BG: egui::Color32 = egui::Color32::from_rgb(242, 243, 247);
-const L_CARD: egui::Color32 = egui::Color32::from_rgb(255, 255, 255);
-const L_BORDER: egui::Color32 = egui::Color32::from_rgb(214, 216, 224);
-const L_INPUT: egui::Color32 = egui::Color32::from_rgb(246, 247, 250);
-const L_TEXT: egui::Color32 = egui::Color32::from_rgb(24, 26, 34);
-const L_MUTED: egui::Color32 = egui::Color32::from_rgb(118, 122, 134);
-const L_ROW_ALT: egui::Color32 = egui::Color32::from_rgb(246, 247, 250);
+// Light surface
+const L_BG:      Color32 = Color32::from_rgb(0xF4, 0xF5, 0xF7);
+const L_CARD:    Color32 = Color32::from_rgb(0xFF, 0xFF, 0xFF);
+const L_BORDER:  Color32 = Color32::from_rgb(0xDA, 0xDC, 0xE2);
+const L_INPUT:   Color32 = Color32::from_rgb(0xF1, 0xF2, 0xF6);
+const L_TEXT:    Color32 = Color32::from_rgb(0x1C, 0x1E, 0x26);
+const L_MUTED:   Color32 = Color32::from_rgb(0x76, 0x7A, 0x86);
+const L_ROW_ALT: Color32 = Color32::from_rgb(0xF6, 0xF7, 0xFA);
 
-/// Resolved theme colors for the current mode.
+// Dark surface
+const D_BG:      Color32 = Color32::from_rgb(0x0E, 0x10, 0x15);
+const D_CARD:    Color32 = Color32::from_rgb(0x1C, 0x1E, 0x25);
+const D_BORDER:  Color32 = Color32::from_rgb(0x3A, 0x3C, 0x44);
+const D_INPUT:   Color32 = Color32::from_rgb(0x2A, 0x2C, 0x34);
+const D_TEXT:    Color32 = Color32::from_rgb(0xF0, 0xF1, 0xF4);
+const D_MUTED:   Color32 = Color32::from_rgb(0xA0, 0xA3, 0xAA);
+const D_ROW_ALT: Color32 = Color32::from_rgb(0x21, 0x23, 0x2B);
+
 #[derive(Clone, Copy)]
 pub struct Th {
-    pub bg: egui::Color32,
-    pub card: egui::Color32,
-    pub border: egui::Color32,
-    pub input: egui::Color32,
-    pub text: egui::Color32,
-    pub muted: egui::Color32,
-    pub row_alt: egui::Color32,
+    pub bg: Color32,
+    pub card: Color32,
+    pub border: Color32,
+    pub input: Color32,
+    pub text: Color32,
+    pub muted: Color32,
+    pub row_alt: Color32,
 }
 
 impl Th {
     pub fn new(dark: bool) -> Self {
         if dark {
-            Self { bg: D_BG, card: D_CARD, border: D_BORDER, input: D_INPUT, text: D_TEXT, muted: D_MUTED, row_alt: D_ROW_ALT }
+            Self { bg: D_BG, card: D_CARD, border: D_BORDER, input: D_INPUT,
+                   text: D_TEXT, muted: D_MUTED, row_alt: D_ROW_ALT }
         } else {
-            Self { bg: L_BG, card: L_CARD, border: L_BORDER, input: L_INPUT, text: L_TEXT, muted: L_MUTED, row_alt: L_ROW_ALT }
+            Self { bg: L_BG, card: L_CARD, border: L_BORDER, input: L_INPUT,
+                   text: L_TEXT, muted: L_MUTED, row_alt: L_ROW_ALT }
         }
     }
 }
 
 pub fn apply_visuals(ctx: &egui::Context, dark: bool) {
     let mut v = if dark { egui::Visuals::dark() } else { egui::Visuals::light() };
-    v.window_rounding = 10.0.into();
-    v.widgets.noninteractive.rounding = 6.0.into();
-    v.widgets.inactive.rounding = 6.0.into();
-    v.widgets.hovered.rounding = 6.0.into();
-    v.widgets.active.rounding = 6.0.into();
-    if dark {
-        v.panel_fill = D_BG;
-        v.extreme_bg_color = egui::Color32::from_rgb(14, 14, 18);
-        v.widgets.inactive.bg_fill = D_INPUT;
-        v.widgets.inactive.weak_bg_fill = D_INPUT;
-    } else {
-        v.panel_fill = L_BG;
-        v.extreme_bg_color = egui::Color32::from_rgb(250, 250, 254);
-        v.widgets.inactive.bg_fill = L_INPUT;
-        v.widgets.inactive.weak_bg_fill = L_INPUT;
-    }
+    let th = Th::new(dark);
+
+    v.window_rounding = 16.0.into();
+    v.widgets.noninteractive.rounding = 10.0.into();
+    v.widgets.inactive.rounding = 10.0.into();
+    v.widgets.hovered.rounding = 10.0.into();
+    v.widgets.active.rounding = 10.0.into();
+
+    v.panel_fill = th.bg;
+    v.extreme_bg_color = th.input;
+    v.widgets.inactive.bg_fill = th.input;
+    v.widgets.inactive.weak_bg_fill = th.input;
+    v.widgets.noninteractive.fg_stroke.color = th.text;
+    v.widgets.inactive.fg_stroke.color = th.text;
+    v.widgets.hovered.fg_stroke.color = th.text;
+    v.widgets.active.fg_stroke.color = th.text;
+    v.widgets.noninteractive.bg_stroke.color = th.border;
+
     ctx.set_visuals(v);
 }

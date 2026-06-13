@@ -9,17 +9,31 @@ use noip_duc::Notification;
 /// Spawn a thread that detects the public IP and sends it back via channel.
 pub fn detect_ip(tx: mpsc::Sender<String>, ctx: egui::Context) {
     thread::spawn(move || {
-        let result = reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(10))
-            .build()
-            .ok()
-            .and_then(|c| c.get("http://ip1.dynupdate.no-ip.com").send().ok())
-            .and_then(|r| r.text().ok())
-            .map(|t| t.trim().to_string())
-            .unwrap_or_else(|| "unavailable".into());
-        let _ = tx.send(result);
+        let result = match detect_ip_blocking() {
+            Ok(ip) => ip,
+            Err(e) => {
+                log::warn!("Public IP detection failed: {e}");
+                "unavailable".into()
+            }
+        };
+        if tx.send(result).is_err() {
+            log::debug!("detect_ip receiver dropped before result arrived");
+        }
         ctx.request_repaint();
     });
+}
+
+fn detect_ip_blocking() -> Result<String, String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("client build: {e}"))?;
+    let resp = client
+        .get("http://ip1.dynupdate.no-ip.com")
+        .send()
+        .map_err(|e| format!("request: {e}"))?;
+    let body = resp.text().map_err(|e| format!("body: {e}"))?;
+    Ok(body.trim().to_string())
 }
 
 /// Fetch hostnames from the No-IP API using a bearer token.
@@ -87,6 +101,8 @@ pub struct ChannelObs(pub mpsc::Sender<Notification>);
 
 impl noip_duc::Observer for ChannelObs {
     fn notify(&self, n: Notification) {
-        let _ = self.0.send(n);
+        if self.0.send(n).is_err() {
+            log::debug!("notification receiver dropped");
+        }
     }
 }

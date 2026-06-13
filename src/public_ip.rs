@@ -49,12 +49,9 @@ pub enum ParseError {
     UnknownMethod(String),
 }
 
-// TODO: Consider Box<DnsMethod> when making a list of IpMethod and getting rid of this clippy
-// suppression
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum IpMethod {
-    Dns(DnsMethod),
+    Dns(Box<DnsMethod>),
     Http(String),
     Static(IpAddr),
 
@@ -84,14 +81,14 @@ impl std::str::FromStr for IpMethod {
     fn from_str(method: &str) -> Result<Self, Self::Err> {
         match method {
             "aws-metadata" => Ok(Self::Http(IP_URL_AWS.to_owned())),
-            "dns" => Ok(Self::Dns(DnsMethod::ipcast()?)),
+            "dns" => Ok(Self::Dns(Box::new(DnsMethod::ipcast()?))),
             "http" => Ok(Self::Http(IP_URL.to_owned())),
             "http-port-8245" => Ok(Self::Http(IP_URL_8245.to_owned())),
 
             #[cfg(test)]
             "fail" => Ok(Self::Fail(Cell::new(false))),
 
-            m if m.starts_with("dns:") => Ok(Self::Dns(m[4..].parse()?)),
+            m if m.starts_with("dns:") => Ok(Self::Dns(Box::new(m[4..].parse()?))),
             m if m.starts_with("http://") => Ok(Self::Http(Url::parse(m)?.to_string())),
             m if m.starts_with("https://") => Ok(Self::Http(Url::parse(m)?.to_string())),
             m if m.starts_with("static:") => Ok(Self::Static(m[7..].parse()?)),

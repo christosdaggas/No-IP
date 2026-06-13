@@ -1,3 +1,11 @@
+//! Library half of the No-IP Dynamic Update Client.
+//!
+//! Embedders supply a [`Config`] (credentials, hostnames, polling cadence and
+//! IP discovery strategy) plus an [`Observer`] to receive [`Notification`]s
+//! and a [`Controller`] for interrupts (UpdateNow / Quit). [`updater`] runs
+//! the discover-update-sleep loop until the controller asks it to stop or
+//! `Config::once` is set.
+
 use std::net::{IpAddr, Ipv4Addr};
 use std::process::Command;
 use std::time::Duration;
@@ -23,17 +31,37 @@ const USER_AGENT: &str = concat!(
     " <support@noip.com>",
 );
 
+/// Inputs to the update loop. Borrowed so callers can keep ownership of their
+/// own credential storage.
 pub struct Config<'a> {
+    /// No-IP account username (or Update Group username).
     pub username: &'a str,
+    /// No-IP account password (or Update Group password).
     pub password: &'a str,
+    /// Hostnames or group names to update. `None` means "use the account
+    /// default", which No-IP infers server-side.
     pub hostnames: Option<&'a std::vec::Vec<String>>,
+    /// How long to wait between IP checks. Must be at least 2 minutes; the
+    /// CLI enforces this. Library callers are trusted.
     pub check_interval: Duration,
+    /// Per-request HTTP timeout used for both IP discovery and update calls.
     pub http_timeout: Duration,
+    /// Optional shell command to run when the public IP changes. Receives
+    /// `CURRENT_IP` / `LAST_IP` as env vars and `{{CURRENT_IP}}` /
+    /// `{{LAST_IP}}` template substitutions.
     pub exec_on_change: Option<&'a str>,
+    /// Ordered list of IP discovery strategies. The first one that succeeds
+    /// wins; failing strategies are skipped on subsequent loops until they
+    /// all fail and get reset.
     pub ip_method: &'a IpMethods,
+    /// Run one discover-update cycle and exit. Useful for cron-style
+    /// invocations.
     pub once: bool,
 }
 
+/// Run the update loop. Returns `Ok` on a clean controller-driven shutdown
+/// or on `Config::once == true` with no error; returns `Err` only when
+/// `once` is set AND the single attempt failed.
 pub fn updater(
     c: Config,
     observer: impl Observer + Clone,

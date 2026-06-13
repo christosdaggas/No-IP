@@ -1,5 +1,6 @@
 mod app;
 mod config;
+mod keyring;
 mod service;
 mod tasks;
 mod theme;
@@ -29,10 +30,9 @@ fn main() -> eframe::Result<()> {
         .ok();
 
     let mut vp = egui::ViewportBuilder::default()
-        .with_inner_size([540.0, 650.0])
-        .with_min_inner_size([420.0, 480.0])
+        .with_inner_size([660.0, 820.0])
+        .with_min_inner_size([560.0, 560.0])
         .with_app_id("com.noip.DUC");
-
     if let Some(icon) = icon {
         vp = vp.with_icon(Arc::new(icon));
     }

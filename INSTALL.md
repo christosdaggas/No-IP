@@ -42,7 +42,7 @@ WantedBy=multi-user.target
 From Source
 -----------
 
-[Rust](https://www.rust-lang.org/) is required to build from source. Follow the instructions at https://rustup.rs/
+[Rust](https://www.rust-lang.org/) is required to build from source. Follow the instructions at https://rustup.rs/. Minimum supported Rust version: **1.76**.
 
 ```
 curl -OL https://www.noip.com/download/linux\?package=source > noip-duc3.tgz
@@ -55,6 +55,25 @@ sudo cp target/release/noip-duc /usr/local/bin
 # - On non-Debian OSes, edit the EnvironmentFile entry.
 sed '/^ExecStart=/ s#usr/bin#usr/local/bin#' debian/service | sudo tee /etc/systemd/system/noip-duc.service
 sudo systemctl daemon-reload
+```
+
+### Building the GUI
+
+The optional `noip-duc-gui` binary uses the platform credential store
+(GNOME Keyring / KWallet via the freedesktop Secret Service) for password
+storage, which requires the D-Bus development headers at build time:
+
+| Distro    | Package                                       |
+|-----------|-----------------------------------------------|
+| Fedora    | `dbus-devel pkgconf-pkg-config`               |
+| Debian/Ubuntu | `libdbus-1-dev pkg-config`                |
+| Alpine    | `dbus-dev pkgconf`                            |
+
+Then build with the `gui` feature:
+
+```
+cargo build --release --features gui --bin noip-duc-gui
+sudo cp target/release/noip-duc-gui /usr/local/bin
 ```
 
 Configuration

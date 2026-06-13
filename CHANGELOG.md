@@ -1,5 +1,37 @@
 ### [Unreleased]
 
+- Security: GUI now stores the No-IP password and API key in the platform
+  keyring (Secret Service / Keychain / Credential Manager) instead of
+  plaintext JSON. Existing configs are migrated transparently on first run.
+- Security: hardened the systemd unit (DynamicUser, ProtectSystem=strict,
+  ProtectHome, NoNewPrivileges, RestrictAddressFamilies=AF_INET AF_INET6,
+  MemoryDenyWriteExecute, system-call filter, memory/CPU caps). The
+  GUI-installed user-service unit gets a matching sandbox.
+- Security: redacted password from `Debug` output of the CLI `Config` so
+  `--verbose` cannot leak credentials into logs.
+- Change: clap 3.2.21 → 4.x. The `IpMethods` Clone/Send/Sync constraint that
+  was blocking the upgrade was sidestepped by parsing it from a `String` after
+  clap is done.
+- Change: trust-dns-resolver 0.23 → hickory-resolver 0.24 (rename only).
+- Change: dropped the `RUSTSEC-2021-0145` (atty) and `RUSTSEC-2024-0370`
+  (proc-macro-error) advisory ignores from `deny.toml` — both crates are
+  gone from the dep tree after the clap upgrade.
+- Change: declared MSRV 1.76.
+- New: GitHub Actions CI running fmt / clippy / test / cargo-deny / cargo-doc.
+- New: GUI `systemctl` operations now run on a worker thread; the UI no
+  longer freezes during install/start/stop/enable/disable. Buttons disable and
+  show a spinner while an op is in flight.
+- New: GUI status indicators include text labels alongside the colored dot
+  for colorblind / accessibility users.
+- New: GUI guards against starting the in-app updater while the systemd
+  service is also running.
+- Test: 14 new unit tests covering every documented update API response code
+  and the permanent-vs-transient backoff classification.
+- Fix: `IpMethod::Dns` is now boxed, removing the `clippy::large_enum_variant`
+  suppression.
+- Fix: GUI no longer silently swallows config-load / IP-detection errors —
+  they're logged at warn level so users can debug headless setups.
+
 ### [3.3.0] - 2024-09-16
 
 - Change: Rename ControlChannel to Controller, SleepOnlyControl to SleepOnlyController.
